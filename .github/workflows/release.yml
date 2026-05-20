@@ -11,15 +11,50 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+
       - name: Use Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: "18.x"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify release version
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          node - "$tag" <<'NODE'
+          const fs = require("fs");
+          const tag = process.argv[2];
+          const manifest = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+          const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
+
+          if (manifest.version !== tag) {
+            throw new Error(`Tag ${tag} does not match manifest.json version ${manifest.version}`);
+          }
+
+          if (packageJson.version !== tag) {
+            throw new Error(`Tag ${tag} does not match package.json version ${packageJson.version}`);
+          }
+          NODE
+
+      - name: Test
+        run: npm test
+
+      - name: Check
+        run: npm run check
+
       - name: Build plugin
         run: |
-          npm install
           npm run build
+
+      - name: Verify release assets
+        run: |
+          test -s main.js
+          test -s manifest.json
+          test -s styles.css
+
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -27,5 +62,5 @@ jobs:
           tag="${GITHUB_REF#refs/tags/}"
           gh release create "$tag" \
             --title="$tag" \
-            --draft \
+            --notes "Todoist Bridge $tag" \
             main.js manifest.json styles.css

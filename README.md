@@ -140,7 +140,7 @@ For an Obsidian Community Plugin release:
 2. Keep `versions.json` in sync when `minAppVersion` changes.
 3. Run `npm test`, `npm run check`, and `npm run build`.
 4. Create a Git tag that matches `manifest.json` version.
-5. Create a GitHub release for that tag and upload `main.js`, `manifest.json`, and `styles.css`.
+5. Push the tag. The release workflow verifies the tag/version match, runs the checks, builds `main.js`, and creates a public GitHub release with `main.js`, `manifest.json`, and `styles.css`.
 6. Submit the GitHub repository through the Obsidian Community directory.
 
-The release workflow in `.github/workflows/release.yml` creates a draft GitHub release with the required assets when a tag is pushed.
+Obsidian reads the root `manifest.json` and `README.md` for the plugin listing, then installs the plugin files from the GitHub release whose tag exactly matches `manifest.json` version.

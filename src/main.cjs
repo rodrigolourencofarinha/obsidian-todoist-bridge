@@ -9445,9 +9445,13 @@ var TaskParser = class {
       body = body.replace(linkRegex, " ").trim();
     }
     body = body.replace(/\s{2,}/g, " ").trim();
+    const normalizeAnchor = (anchor) => anchor.replace(/(<span class="todoist-bridge">)([\s\S]*?)(<\/span>)/i, (_match, open, inner, close) => {
+      const cleanedInner = inner.replace(/\[\s*\]/g, " ").replace(/\s{2,}/g, " ").trim();
+      return `${open}${cleanedInner ? `${cleanedInner} ` : ""}${close}`;
+    });
     const segments = [];
     if (anchorMatch) {
-      segments.push(anchorMatch[0].trim());
+      segments.push(normalizeAnchor(anchorMatch[0]).trim());
     }
     if (linkMatch) {
       segments.push(linkMatch[0].trim());
@@ -10208,6 +10212,8 @@ var FileOperation = class {
       const line = lines[i];
       if (this.lineContainsTodoistTaskId(line, taskId) && this.plugin.taskParser.hasTodoistTag(line)) {
         let newLine = line.replace(/- \[(x|X)\]/g, "- [ ]");
+        newLine = newLine.replace(completionCommentPattern, " ");
+        newLine = newLine.replace(metadataCompletionPattern, " ");
         newLine = newLine.replace(completionInlinePattern, " ");
         newLine = this.plugin.taskParser.normalizeTodoistMarkersOrder(newLine);
         newLine = newLine.replace(/\s{2,}/g, " ").trimEnd();
@@ -11289,7 +11295,7 @@ var TodoistSync = class {
         (objA) => savedTasks.some((objB) => String(objB == null ? void 0 : objB.id) === String(objA == null ? void 0 : objA.parent_item_id))
       );
       const unsynchronized_item_completed_events = this.plugin.todoistSyncAPI.filterActivityEvents(result2, { event_type: "completed", object_type: "item" });
-      const unsynchronized_item_uncompleted_events = this.plugin.todoistSyncAPI.filterActivityEvents(result2, { event_type: "uncompleted", object_type: "item" });
+      const unsynchronized_item_uncompleted_events = this.plugin.todoistSyncAPI.filterActivityEvents(result1, { event_type: "uncompleted", object_type: "item" });
       const unsynchronized_item_deleted_events = this.plugin.todoistSyncAPI.filterActivityEvents(result1, { event_type: "deleted", object_type: "item" });
       const unsynchronized_item_updated_events = this.plugin.todoistSyncAPI.filterActivityEvents(result2, { event_type: "updated", object_type: "item" });
       const unsynchronized_notes_added_events = this.plugin.todoistSyncAPI.filterActivityEvents(result3, { event_type: "added", object_type: "note" });
