@@ -1,9 +1,9 @@
 {
 	"id": "todoist-bridge",
 	"name": "Todoist Bridge",
-	"version": "1.0.4",
+	"version": "1.0.5",
 	"minAppVersion": "1.12.7",
-	"description": "Sync Todoist tasks with Obsidian Markdown tasks marked with #todoist.",
+	"description": "Sync Todoist tasks with Markdown tasks marked with #todoist.",
 	"author": "Rodrigo Farinha",
 	"authorUrl": "https://rodrigolourencofarinha.github.io",
 	"isDesktopOnly": false
