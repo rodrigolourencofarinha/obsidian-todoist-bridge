@@ -46,6 +46,25 @@ test("remote missing is reported and does not create completion action", () => {
   assert.match(plan.broken[0].reason, /missing in Todoist/);
 });
 
+test("legacy numeric Todoist ids are kept local-only instead of broken", () => {
+  const plan = buildRepairPlan({
+    candidates: [{
+      taskId: "8879450871",
+      linkTaskId: "8879450871",
+      path: "Archive/old.md",
+      lineNumber: 9,
+      line: "- [ ] #task Legacy #todoist <span class=\"todoist-bridge\">[todoist_id:: 8879450871] </span> [link](https://app.todoist.com/app/task/8879450871)"
+    }],
+    cachedTasksById: new Map(),
+    remoteTasksById: new Map([["8879450871", { __missing: true }]])
+  });
+
+  assert.deepEqual(plan.toComplete, []);
+  assert.deepEqual(plan.broken, []);
+  assert.equal(plan.legacyNumeric.length, 1);
+  assert.match(plan.legacyNumeric[0].reason, /local-only/);
+});
+
 test("URL mismatch is reported while embedded todoist_id remains authoritative", () => {
   const plan = buildRepairPlan({
     candidates: [{

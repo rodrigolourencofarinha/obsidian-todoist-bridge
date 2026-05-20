@@ -47,6 +47,12 @@ When Todoist confirms completion, the Markdown line is checked and receives a co
 
 `[todoist_id:: ...]` is the durable bridge identity. Cached file paths are hints.
 
+## Backward Compatibility
+
+Older Todoist task links can use numeric IDs such as `8879450871`. Todoist's current REST API uses the newer alphanumeric IDs for normal task operations, so Todoist Bridge keeps numeric `[todoist_id:: ...]` markers as local historical bridge markers.
+
+Audit and repair reports list numeric links separately as legacy local-only links. The plugin does not recreate, delete, complete, or mark those tasks as broken just because the current API cannot verify the old numeric ID. Active alphanumeric task IDs keep the normal two-way sync behavior.
+
 ## Sync Behavior
 
 Normal two-way sync:
@@ -87,6 +93,8 @@ Maintenance actions are in Settings instead of the command palette to reduce acc
 - Backup Todoist Data: writes a Todoist backup JSON file into the vault. Confirmation required.
 
 The command palette exposes only `Sync now (Todoist <-> Obsidian)`.
+
+Repair skips legacy numeric Todoist IDs and reports them as local-only links. This preserves older completed archive lines without creating duplicate Todoist tasks.
 
 ## Data And Privacy
 

@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const {
   classifyBridgeLine,
+  isLegacyNumericTodoistId,
   normalizeCompletionLine,
   rebuildSettingsForOpenTasks
 } = require("../repair-core.cjs");
@@ -55,6 +56,22 @@ test("remote errors and missing tasks are reported but not completed", () => {
   assert.deepEqual(missing.issues, ["missing in Todoist"]);
   assert.equal(error.shouldComplete, false);
   assert.deepEqual(error.issues, ["Todoist fetch error: 429"]);
+});
+
+test("legacy numeric Todoist ids are treated as local-only bridge markers", () => {
+  const line = "- [ ] #task Old bridged task #todoist <span class=\"todoist-bridge\">[todoist_id:: 8879450871] </span> [link](https://app.todoist.com/app/task/8879450871)";
+  const classification = classifyBridgeLine({
+    line,
+    path: "Archive/old.md",
+    lineNumber: 7,
+    remoteTask: { __missing: true }
+  });
+
+  assert.equal(isLegacyNumericTodoistId("8879450871"), true);
+  assert.equal(isLegacyNumericTodoistId("6gXHmvqfrc4C88H4"), false);
+  assert.equal(classification.legacyNumeric, true);
+  assert.equal(classification.shouldComplete, false);
+  assert.deepEqual(classification.issues, ["legacy numeric todoist_id is local-only under Todoist API v1"]);
 });
 
 test("rebuilt settings keep only verified open tasks with canonical file paths", () => {

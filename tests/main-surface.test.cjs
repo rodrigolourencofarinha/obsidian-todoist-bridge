@@ -82,3 +82,9 @@ test("legacy numeric migration is not exposed as normal product surface", () => 
   assert.equal(main.includes("Migrate Legacy Numeric Todoist IDs"), false);
   assert.equal(main.includes("runLegacyIdMigration"), false);
 });
+
+test("repair surface reports legacy numeric links separately", () => {
+  assert.equal(main.includes("Legacy numeric links kept local-only"), true);
+  assert.equal(main.includes('"Legacy Numeric Links"'), true);
+  assert.equal(main.includes("legacy numeric todoist_id is local-only under Todoist API v1"), true);
+});

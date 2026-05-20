@@ -7,6 +7,7 @@ const {
   classifyBridgeLine,
   getTodoistIdFromLine,
   getTodoistLinkTaskId,
+  isLegacyNumericTodoistId,
   isUncheckedTodoistTaskLine,
   normalizeCompletionLine,
   normalizeRemoteOpenTask
@@ -129,6 +130,7 @@ function writeReport(vaultDir, result) {
     `- Verified Todoist completions: ${result.toComplete.length}`,
     `- Verified open tasks retained in bridge state: ${result.openRecords.length}`,
     `- Broken or unverifiable links: ${result.broken.length}`,
+    `- Legacy numeric links kept local-only: ${result.legacyNumeric.length}`,
     `- URL/id mismatches: ${result.urlMismatches.length}`,
     `- Stale cached paths: ${result.stalePaths.length}`,
     `- Files changed: ${result.changedFiles.length}`,
@@ -146,6 +148,7 @@ function writeReport(vaultDir, result) {
     lines.push("");
   };
   addSection("Verified Completions", result.toComplete, (row) => `- ${row.path}:${row.lineNumber} \`${row.taskId}\` - ${row.remoteTask.completed_at || row.remoteTask.updated_at || "completed date unavailable"}`);
+  addSection("Legacy Numeric Links", result.legacyNumeric, (row) => `- ${row.path}:${row.lineNumber} \`${row.taskId}\` - ${row.reason}`);
   addSection("Broken or Unverifiable Links", result.broken, (row) => `- ${row.path}:${row.lineNumber} \`${row.taskId}\` - ${row.reason}`);
   addSection("URL/id Mismatches", result.urlMismatches, (row) => `- ${row.path}:${row.lineNumber} \`${row.taskId}\` link points to \`${row.linkTaskId}\``);
   addSection("Stale Cached Paths", result.stalePaths, (row) => `- \`${row.taskId}\` cache: \`${row.cachedPath}\` -> note: \`${row.path}\``);
@@ -175,6 +178,7 @@ async function main() {
     toComplete: [],
     openRecords: [],
     broken: [],
+    legacyNumeric: [],
     urlMismatches: [],
     stalePaths: [],
     changedFiles: []
@@ -183,7 +187,7 @@ async function main() {
   const contentByFile = new Map();
   for (const candidate of candidates) {
     const cachedTask = cachedById.get(candidate.taskId) || null;
-    const remoteTask = await fetchTodoistTask(token, candidate.taskId);
+    const remoteTask = isLegacyNumericTodoistId(candidate.taskId) ? null : await fetchTodoistTask(token, candidate.taskId);
     const classification = classifyBridgeLine({ ...candidate, remoteTask, cachedTask });
     if (candidate.linkTaskId && candidate.linkTaskId !== candidate.taskId) {
       result.urlMismatches.push(candidate);
@@ -201,6 +205,10 @@ async function main() {
         const completedAt = remoteTask.completed_at || remoteTask.completedAt || remoteTask.updated_at || remoteTask.updatedAt || new Date().toISOString();
         lines[candidate.lineIndex] = normalizeCompletionLine(lines[candidate.lineIndex], candidate.taskId, completedAt);
       }
+      continue;
+    }
+    if (classification.legacyNumeric) {
+      result.legacyNumeric.push({ ...candidate, remoteTask, cachedTask, reason: classification.issues.join("; ") });
       continue;
     }
     if (remoteTask && !remoteTask.__missing && !remoteTask.__error && remoteTask.checked !== true && remoteTask.completed !== true && remoteTask.isCompleted !== true) {
@@ -233,6 +241,7 @@ async function main() {
     toComplete: result.toComplete.length,
     openRecords: result.openRecords.length,
     broken: result.broken.length,
+    legacyNumeric: result.legacyNumeric.length,
     stalePaths: result.stalePaths.length,
     urlMismatches: result.urlMismatches.length,
     changedFiles: result.changedFiles.length

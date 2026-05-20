@@ -11,6 +11,7 @@ This repository is the public-source workspace for the Todoist Bridge Obsidian p
 - Local deletion or `#todoist` removal means detach: remove Todoist bridge labels, then remove local bridge metadata/cache. Never delete or complete the Todoist task for a detach.
 - Todoist bridge-label removal means detach locally: remove `#todoist`, the Todoist link, and `[todoist_id:: ...]`, then drop cache.
 - Missing or inaccessible Todoist tasks are broken links, not completed tasks.
+- Numeric `[todoist_id:: ...]` values are legacy Todoist IDs. Treat them as local-only historical bridge markers unless a future migration maps them to current alphanumeric IDs. Do not call current Todoist task APIs with numeric IDs during repair/audit, and do not classify them as broken only because the API cannot verify them.
 - Cached paths are not authoritative. Resolve by exact `[todoist_id:: ...]` when cache and Markdown disagree.
 
 ## Settings And State
@@ -61,6 +62,8 @@ TODOIST_API_TOKEN=replace-with-token node scripts/repair-completed-todoist-tasks
 ```
 
 Apply only checks off Markdown tasks that Todoist currently confirms as completed. It also rebuilds bridge state from verified open tasks, canonicalizes stale cached paths, and writes a report in the vault root. If the dry run shows `Verified Todoist completions: 0`, apply should not modify Markdown files.
+
+Legacy numeric Todoist IDs must appear in the report as local-only links and must not trigger Todoist writes or duplicate task creation.
 
 ## Files To Know
 

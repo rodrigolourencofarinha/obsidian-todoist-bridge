@@ -7959,6 +7959,7 @@ var import_repair_core = (() => {
     const taskMatch = /\/task\/([A-Za-z0-9_-]+)/.exec(match[1]);
     return taskMatch ? taskMatch[1] : null;
   };
+  const isLegacyNumericTodoistId = (taskId) => /^[0-9]+$/.test(String(taskId || "").trim());
   const isUncheckedTodoistTaskLine = (line) => {
     const match = TASK_RE.exec(line || "");
     return !!match && match[2] === " " && TODOIST_TAG_RE.test(line || "") && !!getTodoistIdFromLine(line);
@@ -7998,16 +7999,23 @@ var import_repair_core = (() => {
   };
   const isRemoteCompleted = (remoteTask) => !!remoteTask && (remoteTask.checked === true || remoteTask.isCompleted === true || remoteTask.completed === true);
   const isRemoteOpen = (remoteTask) => !!remoteTask && !remoteTask.__missing && !remoteTask.__error && !isRemoteCompleted(remoteTask);
+  const normalizeBridgePathForCompare = (filepath) => String(filepath || "").trim().split("\\").join("/").normalize("NFC");
+  const bridgePathsEqual = (left, right) => normalizeBridgePathForCompare(left) === normalizeBridgePathForCompare(right);
   const classifyBridgeLine = ({ line, path: filepath, lineNumber, remoteTask, cachedTask }) => {
     const taskId = getTodoistIdFromLine(line);
     const linkTaskId = getTodoistLinkTaskId(line);
+    const legacyNumeric = isLegacyNumericTodoistId(taskId);
     const issues = [];
     if (!taskId) issues.push("malformed id");
     if (taskId && linkTaskId && linkTaskId !== taskId) issues.push(`URL/id mismatch (${linkTaskId})`);
-    if (cachedTask && cachedTask.path && cachedTask.path !== filepath) issues.push(`stale cached path (${cachedTask.path})`);
-    if (remoteTask && remoteTask.__missing) issues.push("missing in Todoist");
-    if (remoteTask && remoteTask.__error) issues.push(`Todoist fetch error: ${remoteTask.__error}`);
-    return { taskId, path: filepath, lineNumber, checked: isCheckedTodoistTaskLine(line), shouldComplete: isUncheckedTodoistTaskLine(line) && isRemoteCompleted(remoteTask), issues };
+    if (cachedTask && cachedTask.path && !bridgePathsEqual(cachedTask.path, filepath)) issues.push(`stale cached path (${cachedTask.path})`);
+    if (legacyNumeric) {
+      issues.push("legacy numeric todoist_id is local-only under Todoist API v1");
+    } else if (remoteTask && remoteTask.__missing) {
+      issues.push("missing in Todoist");
+    }
+    if (!legacyNumeric && remoteTask && remoteTask.__error) issues.push(`Todoist fetch error: ${remoteTask.__error}`);
+    return { taskId, path: filepath, lineNumber, checked: isCheckedTodoistTaskLine(line), legacyNumeric, shouldComplete: !legacyNumeric && isUncheckedTodoistTaskLine(line) && isRemoteCompleted(remoteTask), issues };
   };
   const normalizeRemoteOpenTask = (remoteTask, candidate, cachedTask) => ({
     ...(cachedTask || {}),
@@ -8019,7 +8027,7 @@ var import_repair_core = (() => {
     url: remoteTask.url || `https://app.todoist.com/app/task/${candidate.taskId}`,
     origin: remoteTask.origin || (cachedTask && cachedTask.origin) || "todoist"
   });
-  return { classifyBridgeLine, getTodoistIdFromLine, getTodoistLinkTaskId, isRemoteOpen, isUncheckedTodoistTaskLine, normalizeCompletionLine, normalizeRemoteOpenTask };
+  return { bridgePathsEqual, classifyBridgeLine, getTodoistIdFromLine, getTodoistLinkTaskId, isLegacyNumericTodoistId, isRemoteOpen, isUncheckedTodoistTaskLine, normalizeCompletionLine, normalizeRemoteOpenTask };
 })();
 var import_sync_core = (() => {
   const BRIDGE_LABELS = /* @__PURE__ */ new Set(["obsidian", "todoist", "task"]);
@@ -12355,6 +12363,7 @@ var TodoistBridgeForObsidian = class extends import_obsidian4.Plugin {
       `- Verified Todoist completions: ${result.toComplete.length}`,
       `- Verified open tasks retained in bridge state: ${result.openRecords.length}`,
       `- Broken or unverifiable links: ${result.broken.length}`,
+      `- Legacy numeric links kept local-only: ${result.legacyNumeric.length}`,
       `- URL/id mismatches: ${result.urlMismatches.length}`,
       `- Stale cached paths: ${result.stalePaths.length}`,
       `- Files changed: ${result.changedFiles.length}`,
@@ -12372,6 +12381,7 @@ var TodoistBridgeForObsidian = class extends import_obsidian4.Plugin {
       lines.push("");
     };
     addSection("Verified Completions", result.toComplete, (row) => `- ${row.path}:${row.lineNumber} \`${row.taskId}\` - ${(row.remoteTask && (row.remoteTask.completed_at || row.remoteTask.completedAt || row.remoteTask.updated_at || row.remoteTask.updatedAt)) || "completed date unavailable"}`);
+    addSection("Legacy Numeric Links", result.legacyNumeric, (row) => `- ${row.path}:${row.lineNumber} \`${row.taskId}\` - ${row.reason}`);
     addSection("Broken or Unverifiable Links", result.broken, (row) => `- ${row.path}:${row.lineNumber} \`${row.taskId}\` - ${row.reason}`);
     addSection("URL/id Mismatches", result.urlMismatches, (row) => `- ${row.path}:${row.lineNumber} \`${row.taskId}\` link points to \`${row.linkTaskId}\``);
     addSection("Stale Cached Paths", result.stalePaths, (row) => `- \`${row.taskId}\` cache: \`${row.cachedPath}\` -> note: \`${row.path}\``);
@@ -12410,6 +12420,7 @@ var TodoistBridgeForObsidian = class extends import_obsidian4.Plugin {
       toComplete: [],
       openRecords: [],
       broken: [],
+      legacyNumeric: [],
       urlMismatches: [],
       stalePaths: [],
       changedFiles: []
@@ -12417,7 +12428,7 @@ var TodoistBridgeForObsidian = class extends import_obsidian4.Plugin {
     const contentByFile = /* @__PURE__ */ new Map();
     for (const candidate of candidates) {
       const cachedTask = cachedById.get(candidate.taskId) || null;
-      const remoteTask = await this.fetchTodoistTaskForRepair(candidate.taskId);
+      const remoteTask = import_repair_core.isLegacyNumericTodoistId(candidate.taskId) ? null : await this.fetchTodoistTaskForRepair(candidate.taskId);
       const classification = import_repair_core.classifyBridgeLine({ ...candidate, remoteTask, cachedTask });
       if (candidate.linkTaskId && candidate.linkTaskId !== candidate.taskId) {
         result.urlMismatches.push(candidate);
@@ -12436,6 +12447,10 @@ var TodoistBridgeForObsidian = class extends import_obsidian4.Plugin {
           const completedAt = remoteTask.completed_at || remoteTask.completedAt || remoteTask.updated_at || remoteTask.updatedAt || new Date().toISOString();
           context.lines[candidate.lineIndex] = import_repair_core.normalizeCompletionLine(context.lines[candidate.lineIndex], candidate.taskId, completedAt);
         }
+        continue;
+      }
+      if (classification.legacyNumeric) {
+        result.legacyNumeric.push({ ...candidate, remoteTask, cachedTask, reason: classification.issues.join("; ") });
         continue;
       }
       if (import_repair_core.isRemoteOpen(remoteTask)) {

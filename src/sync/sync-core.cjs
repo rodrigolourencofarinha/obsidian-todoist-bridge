@@ -61,6 +61,7 @@ function buildRepairPlan({ candidates, cachedTasksById, remoteTasksById }) {
     toComplete: [],
     openRecords: [],
     broken: [],
+    legacyNumeric: [],
     urlMismatches: [],
     stalePaths: []
   };
@@ -85,6 +86,10 @@ function buildRepairPlan({ candidates, cachedTasksById, remoteTasksById }) {
     }
     if (classification.shouldComplete) {
       plan.toComplete.push({ ...candidate, remoteTask, cachedTask });
+      continue;
+    }
+    if (classification.legacyNumeric) {
+      plan.legacyNumeric.push({ ...candidate, remoteTask, cachedTask, reason: classification.issues.join("; ") });
       continue;
     }
     if (isRemoteOpen(remoteTask)) {

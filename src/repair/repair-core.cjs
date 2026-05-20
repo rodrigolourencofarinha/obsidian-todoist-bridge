@@ -15,6 +15,10 @@ function getTodoistLinkTaskId(line) {
   return taskMatch ? taskMatch[1] : null;
 }
 
+function isLegacyNumericTodoistId(taskId) {
+  return /^[0-9]+$/.test(String(taskId || "").trim());
+}
+
 function isTodoistTaskLine(line) {
   return TASK_RE.test(line || "") && TODOIST_TAG_RE.test(line || "") && !!getTodoistIdFromLine(line);
 }
@@ -90,6 +94,7 @@ function bridgePathsEqual(left, right) {
 function classifyBridgeLine({ line, path: filepath, lineNumber, remoteTask, cachedTask }) {
   const taskId = getTodoistIdFromLine(line);
   const linkTaskId = getTodoistLinkTaskId(line);
+  const legacyNumeric = isLegacyNumericTodoistId(taskId);
   const issues = [];
   if (!taskId) {
     issues.push("malformed id");
@@ -100,10 +105,12 @@ function classifyBridgeLine({ line, path: filepath, lineNumber, remoteTask, cach
   if (cachedTask && cachedTask.path && !bridgePathsEqual(cachedTask.path, filepath)) {
     issues.push(`stale cached path (${cachedTask.path})`);
   }
-  if (remoteTask && remoteTask.__missing) {
+  if (legacyNumeric) {
+    issues.push("legacy numeric todoist_id is local-only under Todoist API v1");
+  } else if (remoteTask && remoteTask.__missing) {
     issues.push("missing in Todoist");
   }
-  if (remoteTask && remoteTask.__error) {
+  if (!legacyNumeric && remoteTask && remoteTask.__error) {
     issues.push(`Todoist fetch error: ${remoteTask.__error}`);
   }
   return {
@@ -111,7 +118,8 @@ function classifyBridgeLine({ line, path: filepath, lineNumber, remoteTask, cach
     path: filepath,
     lineNumber,
     checked: isCheckedTodoistTaskLine(line),
-    shouldComplete: isUncheckedTodoistTaskLine(line) && isRemoteCompleted(remoteTask),
+    legacyNumeric,
+    shouldComplete: !legacyNumeric && isUncheckedTodoistTaskLine(line) && isRemoteCompleted(remoteTask),
     issues
   };
 }
@@ -165,6 +173,7 @@ module.exports = {
   getTodoistIdFromLine,
   getTodoistLinkTaskId,
   isCheckedTodoistTaskLine,
+  isLegacyNumericTodoistId,
   isRemoteCompleted,
   isRemoteOpen,
   isTodoistTaskLine,
