@@ -1,0 +1,15 @@
+{
+  "name": "todoist-bridge",
+  "version": "1.0.0",
+  "private": false,
+  "type": "commonjs",
+  "scripts": {
+    "pretest": "npm run build",
+    "test": "node --test",
+    "precheck": "npm run build",
+    "check": "node --check main.js && node --check src/main.cjs && node --check repair-core.cjs && node --check src/state/bridge-state-store.cjs && node --check src/repair/todoist-fetch.cjs && node --check scripts/repair-completed-todoist-tasks.cjs && node --check scripts/migrate-runtime-state.cjs && node --check scripts/smoke-load-main.cjs && node scripts/smoke-load-main.cjs",
+    "build": "node scripts/build.cjs",
+    "migrate-state": "node scripts/migrate-runtime-state.cjs"
+  },
+  "devDependencies": {}
+}
