@@ -6,6 +6,8 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const main = fs.readFileSync(path.join(root, "main.js"), "utf8");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
+const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
+const releaseWorkflow = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8");
 const repairScript = fs.readFileSync(path.join(root, "scripts", "repair-completed-todoist-tasks.cjs"), "utf8");
 
 test("manifest uses public community plugin metadata", () => {
@@ -87,4 +89,53 @@ test("repair surface reports legacy numeric links separately", () => {
   assert.equal(main.includes("Legacy numeric links kept local-only"), true);
   assert.equal(main.includes('"Legacy Numeric Links"'), true);
   assert.equal(main.includes("legacy numeric todoist_id is local-only under Todoist API v1"), true);
+});
+
+test("bundled community plugin avoids direct Node filesystem access", () => {
+  const disallowed = [
+    'require("fs")',
+    'require("path")',
+    'require("node:fs")',
+    'require("node:path")',
+    "node:sqlite",
+    "todoist-bridge-state.sqlite",
+    "loadNodeModule",
+    "class BridgeStateStore",
+    "new import_bridge_state_store.BridgeStateStore",
+    "requires Node filesystem modules"
+  ];
+
+  for (const text of disallowed) {
+    assert.equal(main.includes(text), false, text);
+  }
+});
+
+test("release workflow attests community plugin assets", () => {
+  assert.match(releaseWorkflow, /id-token:\s*write/);
+  assert.match(releaseWorkflow, /attestations:\s*write/);
+  assert.match(releaseWorkflow, /artifact-metadata:\s*write/);
+  assert.match(releaseWorkflow, /uses:\s*actions\/attest@v4/);
+  assert.equal(releaseWorkflow.includes("main.js"), true);
+  assert.equal(releaseWorkflow.includes("manifest.json"), true);
+  assert.equal(releaseWorkflow.includes("styles.css"), true);
+});
+
+test("readme is consumer-facing instead of developer-facing", () => {
+  const requiredHeadings = [
+    "## Setup",
+    "## Daily use",
+    "## How the bridge works",
+    "## Settings",
+    "## Commands",
+    "## Troubleshooting"
+  ];
+
+  for (const heading of requiredHeadings) {
+    assert.equal(readme.includes(heading), true, heading);
+  }
+
+  assert.equal(/^## Install\b/m.test(readme), false);
+  assert.equal(/^## Development\b/m.test(readme), false);
+  assert.equal(readme.includes("npm run"), false);
+  assert.equal(readme.includes("Manual install"), false);
 });

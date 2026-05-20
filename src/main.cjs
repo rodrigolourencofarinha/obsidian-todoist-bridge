@@ -7559,13 +7559,6 @@ var import_bridge_state_store = (() => {
   const RUNTIME_SETTING_KEYS = new Set(["todoistTasksData", "fileMetadata", "statistics"]);
   const PERSISTED_SETTING_KEYS = new Set(["todoistAPISecretName", "defaultProjectId", "automaticSynchronizationInterval", "automaticSynchronizationEnabled", "disableTodoistInboundSync", "debugMode"]);
   const cloneJson = (value) => value == null ? value : JSON.parse(JSON.stringify(value));
-  const loadNodeModule = (name) => {
-    try {
-      return require(name);
-    } catch {
-      return null;
-    }
-  };
   const joinPath = (...parts) => parts.filter(Boolean).join("/").replace(/\/+/g, "/");
   const emptyState = () => ({ version: STATE_VERSION, revision: 0, tasks: [], projects: [], events: [], fileMetadata: {}, dirtyFiles: [], dirtyTaskIds: [], reconcileCursor: 0, tombstones: [], lastWriterDevice: null, lastWriteReason: null, lastWriteAt: null, updatedAt: null });
   const normalizeId = (value) => value == null ? "" : String(value).trim();
@@ -7800,95 +7793,6 @@ var import_bridge_state_store = (() => {
     if (comparison < 0) return mirror;
     return normalizeState({ ...mergeRuntimeStates({ loaded: emptyState(), current: primary, local: mirror }), revision: Math.max(primary.revision, mirror.revision), updatedAt: primary.updatedAt || mirror.updatedAt, lastWriterDevice: primary.lastWriterDevice || mirror.lastWriterDevice, lastWriteReason: primary.lastWriteReason || mirror.lastWriteReason, lastWriteAt: primary.lastWriteAt || mirror.lastWriteAt });
   };
-  const tryOpenSqlite = (filePath) => {
-    try {
-      const sqlite = loadNodeModule("node:sqlite");
-      if (!sqlite) return null;
-      if (!sqlite.DatabaseSync) return null;
-      const database = new sqlite.DatabaseSync(filePath);
-      database.exec("CREATE TABLE IF NOT EXISTS bridge_state (id TEXT PRIMARY KEY, payload TEXT NOT NULL)");
-      return database;
-    } catch {
-      return null;
-    }
-  };
-  class BridgeStateStore {
-    constructor({ dir, preferSqlite = true, writerDevice = "desktop" } = {}) {
-      if (!dir) throw new Error("BridgeStateStore requires a directory");
-      this.fs = loadNodeModule("fs");
-      this.path = loadNodeModule("path");
-      if (!this.fs || !this.path) throw new Error("BridgeStateStore requires Node filesystem modules");
-      this.dir = dir;
-      this.writerDevice = writerDevice;
-      this.fs.mkdirSync(this.dir, { recursive: true });
-      this.jsonPath = this.path.join(this.dir, "todoist-bridge-state.json");
-      this.sqlitePath = this.path.join(this.dir, "todoist-bridge-state.sqlite");
-      this.sqlite = preferSqlite ? tryOpenSqlite(this.sqlitePath) : null;
-      this.backend = this.sqlite ? "sqlite" : "json";
-      if (this.backend === "sqlite") {
-        this.writePersistentState(resolvePersistentStates(this.readSqliteState(), this.readJsonState()));
-      } else if (!this.fs.existsSync(this.jsonPath)) {
-        this.writeState(emptyState(), { reason: "initialize" });
-      }
-    }
-    readSqliteState() {
-      if (!this.sqlite) return null;
-      const row = this.sqlite.prepare("SELECT payload FROM bridge_state WHERE id = ?").get("state");
-      return row && row.payload ? JSON.parse(row.payload) : null;
-    }
-    readJsonState() {
-      try {
-        if (!this.fs.existsSync(this.jsonPath)) return null;
-        return JSON.parse(this.fs.readFileSync(this.jsonPath, "utf8"));
-      } catch {
-        return null;
-      }
-    }
-    readState() {
-      if (this.backend === "sqlite") return normalizeState(this.readSqliteState() || emptyState());
-      try {
-        return normalizeState(JSON.parse(this.fs.readFileSync(this.jsonPath, "utf8")));
-      } catch {
-        return emptyState();
-      }
-    }
-    writeJsonState(state) {
-      const tmpPath = `${this.jsonPath}.${process.pid}.${Date.now()}.tmp`;
-      this.fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2), "utf8");
-      this.fs.renameSync(tmpPath, this.jsonPath);
-    }
-    writePersistentState(state) {
-      const normalized = normalizeState(state);
-      if (this.backend === "sqlite") {
-        this.sqlite.prepare("INSERT INTO bridge_state (id, payload) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload").run("state", JSON.stringify(normalized));
-        this.writeJsonState(normalized);
-        return normalized;
-      }
-      this.writeJsonState(normalized);
-      return normalized;
-    }
-    writeState(state, options = {}) {
-      const current = this.readState();
-      const now = new Date().toISOString();
-      const next = normalizeState({ ...state, revision: current.revision + 1, updatedAt: now, lastWriterDevice: options.writerDevice || this.writerDevice, lastWriteReason: options.reason || state.lastWriteReason || "runtime-save", lastWriteAt: now });
-      return this.writePersistentState(next);
-    }
-    snapshot() {
-      return { backend: this.backend, ...cloneJson(this.readState()) };
-    }
-    migrateFromSettings(settings) {
-      this.writeState(stateFromSettings(settings), { reason: "migrate-legacy-settings" });
-      return this.snapshot();
-    }
-    rebuildFromOpenRecords(openRecords) {
-      this.writeState(buildStateFromOpenRecords(openRecords, this.readState()), { reason: "rebuild-open-records" });
-      return this.snapshot();
-    }
-    replaceState(state, options = {}) {
-      this.writeState(state, options);
-      return this.snapshot();
-    }
-  }
   class AdapterBridgeStateStore {
     constructor({ adapter, statePath = ADAPTER_STATE_PATH, writerDevice = "mobile-adapter" } = {}) {
       if (!adapter || typeof adapter.read !== "function" || typeof adapter.write !== "function") throw new Error("AdapterBridgeStateStore requires an Obsidian adapter with read/write");
@@ -7942,7 +7846,7 @@ var import_bridge_state_store = (() => {
       return this.snapshot();
     }
   }
-  return { AdapterBridgeStateStore, ADAPTER_STATE_PATH, BridgeStateStore, addRuntimeTombstone, buildStateFromOpenRecords, mergeRuntimeStates, resolvePersistentStates, settingsWithoutRuntimeState, stateFromSettings, stateToLegacyRuntime };
+  return { AdapterBridgeStateStore, ADAPTER_STATE_PATH, addRuntimeTombstone, buildStateFromOpenRecords, mergeRuntimeStates, resolvePersistentStates, settingsWithoutRuntimeState, stateFromSettings, stateToLegacyRuntime };
 })();
 var import_repair_core = (() => {
   const TODOIST_TAG_RE = /(^|\s)#todoist\b/i;
@@ -11689,19 +11593,7 @@ var TodoistBridgeForObsidian = class extends import_obsidian4.Plugin {
     }
   }
   getPluginDataDirectory() {
-    try {
-      const adapter = this.app && this.app.vault ? this.app.vault.adapter : null;
-      const basePath = adapter && typeof adapter.basePath === "string" ? adapter.basePath : adapter && typeof adapter.getBasePath === "function" ? adapter.getBasePath() : null;
-      const configDir = this.getVaultConfigDir();
-      if (!basePath || !configDir) {
-        return null;
-      }
-      const pathModule = require("path");
-      return pathModule.join(basePath, ...configDir.split("/"), "plugins", this.getPluginId());
-    } catch (error) {
-      console.error("Todoist Bridge: failed to resolve plugin data directory", error);
-      return null;
-    }
+    return null;
   }
   getAdapterRuntimeStateStore() {
     try {
@@ -11713,7 +11605,7 @@ var TodoistBridgeForObsidian = class extends import_obsidian4.Plugin {
       if (!statePath) {
         return null;
       }
-      return new import_bridge_state_store.AdapterBridgeStateStore({ adapter, statePath, writerDevice: "mobile-adapter" });
+      return new import_bridge_state_store.AdapterBridgeStateStore({ adapter, statePath, writerDevice: "vault-adapter" });
     } catch (error) {
       console.error("Todoist Bridge: failed to create adapter runtime state store", error);
       return null;
@@ -11780,16 +11672,6 @@ var TodoistBridgeForObsidian = class extends import_obsidian4.Plugin {
       }
     };
     try {
-      const dir = this.getPluginDataDirectory();
-      if (dir) {
-        const fs = require("fs");
-        for (const entry of fs.readdirSync(dir)) {
-          addCandidate(entry);
-        }
-      }
-    } catch {
-    }
-    try {
       const adapter = this.app && this.app.vault ? this.app.vault.adapter : null;
       if (adapter && typeof adapter.list === "function") {
         const adapterDir = this.getAdapterPluginDirectoryPath();
@@ -11822,12 +11704,7 @@ var TodoistBridgeForObsidian = class extends import_obsidian4.Plugin {
   }
   async initializeRuntimeStateFromDisk(legacyData = {}) {
     try {
-      const dir = this.getPluginDataDirectory();
-      if (dir) {
-        this.runtimeStateStore = new import_bridge_state_store.BridgeStateStore({ dir, preferSqlite: true, writerDevice: "desktop" });
-      } else {
-        this.runtimeStateStore = this.getAdapterRuntimeStateStore();
-      }
+      this.runtimeStateStore = this.getAdapterRuntimeStateStore();
       if (!this.runtimeStateStore) {
         this.settings.todoistTasksData = this.settings.todoistTasksData || { projects: [], tasks: [], events: [] };
         this.settings.fileMetadata = this.settings.fileMetadata || {};
@@ -12142,21 +12019,6 @@ var TodoistBridgeForObsidian = class extends import_obsidian4.Plugin {
       eventLoggedIso
     };
     const line = JSON.stringify(entry) + "\n";
-    let desktopError = null;
-    try {
-      const logDir = this.getPluginDataDirectory();
-      if (logDir) {
-        const fs = require("fs");
-        const fsPromises = fs.promises;
-        const pathModule = require("path");
-        const logPath = pathModule.join(logDir, "todoist-completions.log");
-        await fsPromises.mkdir(logDir, { recursive: true });
-        await fsPromises.appendFile(logPath, line, "utf8");
-        return;
-      }
-    } catch (error) {
-      desktopError = error;
-    }
     try {
       const adapterLogPath = this.getAdapterActivityLogPath();
       if (adapterLogPath && await this.appendAdapterTextFile(adapterLogPath, line)) {
@@ -12165,9 +12027,6 @@ var TodoistBridgeForObsidian = class extends import_obsidian4.Plugin {
     } catch (adapterError) {
       console.error("Todoist Bridge: failed to write adapter activity log", adapterError);
       return;
-    }
-    if (desktopError) {
-      console.error("Todoist Bridge: failed to write activity log", desktopError);
     }
   }
   async handleTaskCompletion(taskId, options = {}) {
@@ -12501,14 +12360,10 @@ var TodoistBridgeForObsidian = class extends import_obsidian4.Plugin {
     const runtimeWarnings = this.getRuntimeStateWarnings(stateSnapshot, conflictFiles);
     let completionLogLines = 0;
     try {
-      const dir = this.getPluginDataDirectory();
-      if (dir) {
-        const fs = require("fs");
-        const pathModule = require("path");
-        const logPath = pathModule.join(dir, "todoist-completions.log");
-        if (fs.existsSync(logPath)) {
-          completionLogLines = fs.readFileSync(logPath, "utf8").split("\n").filter((line) => line.trim()).length;
-        }
+      const adapter = this.app && this.app.vault ? this.app.vault.adapter : null;
+      const logPath = this.getAdapterActivityLogPath();
+      if (adapter && typeof adapter.read === "function" && logPath && (typeof adapter.exists !== "function" || await adapter.exists(logPath))) {
+        completionLogLines = String(await adapter.read(logPath)).split("\n").filter((line) => line.trim()).length;
       }
     } catch (error) {
       console.error("Todoist Bridge: failed to read diagnostics log count", error);
