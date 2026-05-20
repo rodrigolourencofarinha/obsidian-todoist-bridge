@@ -10947,9 +10947,9 @@ var TodoistSync = class {
   async closeTask(taskId) {
     try {
       await this.plugin.todoistRestAPI.CloseTask(taskId);
-      await this.plugin.fileOperation.completeTaskInTheFile(taskId, new Date().toISOString());
-      await this.plugin.cacheOperation.closeTaskToCacheByID(taskId);
-      this.plugin.saveSettings();
+      const completedAt = new Date().toISOString();
+      await this.plugin.handleTaskCompletion(taskId, { source: "obsidian", completedAt });
+      await this.plugin.saveSettings();
       // notification suppressed
     } catch (error) {
       console.error("Error closing task:", error);

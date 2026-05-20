@@ -216,3 +216,63 @@ test("handleTodoistTagRemoval records a runtime tombstone", async () => {
     delete require.cache[require.resolve("../main.js")];
   }
 });
+
+test("checkbox completion path uses shared completion handler", async () => {
+  const originalLoad = Module._load;
+
+  Module._load = function loadWithObsidianMock(request, parent, isMain) {
+    if (request === "obsidian") {
+      class Plugin {}
+      class PluginSettingTab {}
+      class Setting {}
+      class Notice {}
+      class MarkdownView {}
+      class TFile {}
+      return { Plugin, PluginSettingTab, Setting, Notice, MarkdownView, TFile };
+    }
+    return originalLoad.apply(this, arguments);
+  };
+
+  try {
+    delete require.cache[require.resolve("../main.js")];
+    const PluginClass = require("../main.js").default;
+    const plugin = new PluginClass();
+    plugin.app = { vault: {}, workspace: {} };
+    plugin.initializeModuleClass();
+
+    const calls = [];
+    plugin.todoistRestAPI = {
+      async CloseTask(taskId) {
+        calls.push(["close", taskId]);
+      }
+    };
+    plugin.fileOperation = {
+      async completeTaskInTheFile() {
+        throw new Error("closeTask should delegate note/cache cleanup to handleTaskCompletion");
+      }
+    };
+    plugin.cacheOperation = {
+      async closeTaskToCacheByID() {
+        throw new Error("closeTask should delegate cache cleanup to handleTaskCompletion");
+      }
+    };
+    plugin.handleTaskCompletion = async (taskId, options) => {
+      calls.push(["handle", taskId, options.source, typeof options.completedAt]);
+      return true;
+    };
+    plugin.saveSettings = async () => {
+      calls.push(["save"]);
+    };
+
+    await plugin.todoistSync.closeTask("task1");
+
+    assert.deepEqual(calls, [
+      ["close", "task1"],
+      ["handle", "task1", "obsidian", "string"],
+      ["save"]
+    ]);
+  } finally {
+    Module._load = originalLoad;
+    delete require.cache[require.resolve("../main.js")];
+  }
+});
