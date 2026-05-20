@@ -6,7 +6,7 @@ const {
   isLegacyNumericTodoistId,
   normalizeCompletionLine,
   rebuildSettingsForOpenTasks
-} = require("../repair-core.cjs");
+} = require("../src/repair/repair-core.cjs");
 
 test("marks a stale-path Todoist completion using the task id in the moved note", () => {
   const line = "- [ ] #task Write concrete points #todoist <span class=\"todoist-bridge\">[todoist_id:: 6gXHmvqfrc4C88H4] </span> [link](https://app.todoist.com/app/task/6gXHmvqfrc4C88H4)";

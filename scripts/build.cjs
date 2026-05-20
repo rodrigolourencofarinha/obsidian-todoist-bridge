@@ -21,7 +21,6 @@ const requiredFiles = [
   "src/state/bridge-state-store.cjs",
   "src/repair/repair-core.cjs",
   "src/sync/sync-core.cjs",
-  "repair-core.cjs",
   "scripts/smoke-load-main.cjs"
 ];
 

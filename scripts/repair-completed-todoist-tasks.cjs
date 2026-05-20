@@ -11,7 +11,7 @@ const {
   isUncheckedTodoistTaskLine,
   normalizeCompletionLine,
   normalizeRemoteOpenTask
-} = require("../repair-core.cjs");
+} = require("../src/repair/repair-core.cjs");
 const {
   BridgeStateStore,
   settingsWithoutRuntimeState
