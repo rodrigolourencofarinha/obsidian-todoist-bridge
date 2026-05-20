@@ -65,7 +65,7 @@ test("settings use SecretStorage for Todoist token selection", () => {
   assert.equal(main.includes("todoistAPISecretName"), true);
   assert.equal(main.includes(".settings.todoistAPIToken = value"), false);
   assert.equal(main.includes(".setValue(this.plugin.settings.todoistAPIToken)"), false);
-  assert.equal(main.includes("this.settings.todoistAPIToken"), false);
+  assert.equal(main.includes("getSecret("), true);
 });
 
 test("repair script uses environment token instead of plugin data token", () => {

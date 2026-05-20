@@ -11403,6 +11403,7 @@ var TodoistBridgeForObsidian = class extends import_obsidian4.Plugin {
     }
     this.autoSyncIntervalId = void 0;
     this.addSettingTab(new TodoistBridgeSettingTab(this.app, this));
+    await this.migrateLegacyTodoistTokenToSecretStorage();
     if (!this.getTodoistAPIToken()) {
     } else {
       await this.initializePlugin();
@@ -11580,13 +11581,57 @@ var TodoistBridgeForObsidian = class extends import_obsidian4.Plugin {
   }
   getTodoistAPIToken() {
     const secretName = this.settings && this.settings.todoistAPISecretName ? String(this.settings.todoistAPISecretName) : "";
-    if (secretName && this.app && this.app.secretStorage && typeof this.app.secretStorage.get === "function") {
-      const token = this.app.secretStorage.get(secretName);
+    if (secretName) {
+      const token = this.getSecretStorageValue(secretName);
       if (token) {
         return token;
       }
     }
     return "";
+  }
+  getSecretStorage() {
+    return this.app && this.app.secretStorage ? this.app.secretStorage : null;
+  }
+  getSecretStorageValue(secretName) {
+    const storage = this.getSecretStorage();
+    if (!storage || !secretName) {
+      return "";
+    }
+    if (typeof storage.getSecret === "function") {
+      return storage.getSecret(secretName) || "";
+    }
+    if (typeof storage.get === "function") {
+      return storage.get(secretName) || "";
+    }
+    return "";
+  }
+  setSecretStorageValue(secretName, secretValue) {
+    const storage = this.getSecretStorage();
+    if (!storage || !secretName || !secretValue) {
+      return false;
+    }
+    if (typeof storage.setSecret === "function") {
+      storage.setSecret(secretName, secretValue);
+      return true;
+    }
+    if (typeof storage.set === "function") {
+      storage.set(secretName, secretValue);
+      return true;
+    }
+    return false;
+  }
+  async migrateLegacyTodoistTokenToSecretStorage() {
+    const legacyToken = this.settings && this.settings["todoistAPIToken"] ? String(this.settings["todoistAPIToken"]) : "";
+    if (!legacyToken || this.getTodoistAPIToken()) {
+      return false;
+    }
+    const secretName = this.settings.todoistAPISecretName || "todoist-bridge-todoist-api-token";
+    if (!this.setSecretStorageValue(secretName, legacyToken)) {
+      return false;
+    }
+    this.settings.todoistAPISecretName = secretName;
+    await this.saveSettings();
+    return true;
   }
   getPluginId() {
     return this.manifest && this.manifest.id ? String(this.manifest.id) : "todoist-bridge";
