@@ -122,12 +122,14 @@ test("release workflow attests community plugin assets", () => {
 
 test("readme is consumer-facing instead of developer-facing", () => {
   const requiredHeadings = [
-    "## Setup",
-    "## Daily use",
-    "## How the bridge works",
-    "## Settings",
-    "## Commands",
-    "## Troubleshooting"
+    "## Why Use Todoist Bridge?",
+    "## In One Minute",
+    "## Quick Start",
+    "## Active And Detached Tasks",
+    "## Everyday Sync",
+    "## Deleting Or Disconnecting Tasks",
+    "## Mobile Sync",
+    "## FAQ"
   ];
 
   for (const heading of requiredHeadings) {
@@ -138,4 +140,7 @@ test("readme is consumer-facing instead of developer-facing", () => {
   assert.equal(/^## Development\b/m.test(readme), false);
   assert.equal(readme.includes("npm run"), false);
   assert.equal(readme.includes("Manual install"), false);
+  assert.equal(readme.includes("CLI"), false);
+  assert.equal(readme.includes("runtime"), false);
+  assert.equal(readme.includes("cache"), false);
 });
